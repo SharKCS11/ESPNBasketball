@@ -4,10 +4,11 @@ import time
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.stats import shapiro
+import scipy.stats as stats
+import pickle
 
 
-
+'''
 # Get the list of all players
 all_players = players.get_players()
 
@@ -15,6 +16,8 @@ all_players = players.get_players()
 df_2023_24 = pd.read_csv('./player_list_data/player_list_2023_24_top250.csv')
 minPlayedDict = {}
 names_filter = set()
+
+
 for row in df_2023_24.itertuples():
 	name_lower = row.Player.lower()
 	names_filter.add(row.Player.lower())
@@ -35,39 +38,71 @@ print("Top 250 active players and IDs in 2023-24 are:")
 for player in filtered_players:
 	print(player['full_name'], " - " , player['id'])
 
+with open('./player_list_data/filtered_players_dict.pkl','wb') as file:
+	pickle.dump(filtered_players, file)
 
+'''
 
 ''' ********************************* ```
-	LIST OF PLAYERS IS HERE, NOW START ANALYSIS
+	LIST OF PLAYERS IS PICKLED. LOAD THEM
+``` ********************************* '''
+filtered_players = None
+with open('player_list_data/filtered_players_dict.pkl', 'rb') as file:
+	filtered_players = pickle.load(file)
+
+''' ********************************* ```
+	NOW GENERATE THE CSVs
 ``` ********************************* '''
 
 '''
-tpID = 201942
-tplayer = players.find_player_by_id(tpID)
-season = "2023-24"
-gamelog = playergamelog.PlayerGameLog(player_id=tpID, season=season)
-gamelog_df = gamelog.get_data_frames()[0]
-gamelog_df['FPT'] = (
-    gamelog_df['PTS'] + 
-    1.5 * gamelog_df['AST'] + 
-    gamelog_df['REB'] + 
-    0.2 * gamelog_df['OREB'] +
-    3 * gamelog_df['STL'] + 
-    3 * gamelog_df['BLK'] - 
-    gamelog_df['TOV'] - 
-    0.5 * (gamelog_df['FTA'] - gamelog_df['FTM'])
-)
+end_idx = len(filtered_players)
+start_idx = 0
 
-fpCol = gamelog_df['FPT']
+season = '2023-24'
+end_idx = 1 # uncomment later
+for idx in range(start_idx, end_idx):
+	tpID = filtered_players[idx]['id']
+	gamelog = playergamelog.PlayerGameLog(player_id=tpID, season=season)
+	df = gamelog.get_data_frames()[0]
+	df['FPT'] = (df['PTS'] * 1 +
+             df['AST'] * 1.5 +
+             df['REB'] * 1 +
+             df['OREB'] * 0.2 +
+             df['STL'] * 3 +
+             df['BLK'] * 3 -
+             df['TOV'] * 1 -
+             (df['FTA'] - df['FTM']) * 0.5)
+	file_name = f"./player_list_data/igl/game_log_{tpID}.csv"
+	df.to_csv(file_name, index=False, mode='w')
+	print("FPTS for ", filtered_players[idx]['full_name'], " saved to ", file_name)
+	
+'''
+
+''' ********************************* ```
+	CSVs GENERATED. NOW ANALYZE
+``` ********************************* '''
 
 
-# Plotting the histogram of the 'FPT' column
-# ~ plt.figure(figsize=(10, 6))
-# ~ plt.hist(fpCol, bins=20, edgecolor='black', alpha=0.7)
-# ~ plt.title('Histogram of FPT')
-# ~ plt.xlabel('FPT')
-# ~ plt.ylabel('Frequency')
-# ~ plt.show()
+end_idx = len(filtered_players)
+start_idx = 0
+
+end_idx = 1 # unclomment later
+
+for idx in range(start_idx, end_idx):
+	tpID = filtered_players[idx]['id']
+	file_name = f"./player_list_data/igl/game_log_{tpID}.csv"
+	gamelog_df = pd.read_csv(file_name)
+	fpCol = gamelog_df['FPT']
+
+	# Perform the Shapiro-Wilk test
+	print("Mean and stddev are: ", round(fpCol.mean(), 2), 
+			" and ", round(fpCol.std(), 2))
+	stat, p_value = stats.shapiro(fpCol)
+	stat = "{:.4g}".format(stat)
+	p_value = "{:.4g}".format(p_value)
+	print(f"Shapiro Test Statistic: {stat}")
+	print(f"P-Value: {p_value}")
+
 
 # Plotting the Q-Q plot
 plt.figure(figsize=(10, 6))
@@ -75,10 +110,8 @@ stats.probplot(fpCol, dist="norm", plot=plt)
 plt.title('Q-Q Plot of FPT')
 plt.show()
 
-# Perform the Shapiro-Wilk test
-stat, p_value = shapiro(fpCol)
-print(f"Shapiro-Wilk Test Statistic: {stat}")
-print(f"P-Value: {p_value}")
+
+
 
 print("DONE.")
-'''
+
