@@ -59,11 +59,17 @@ end_idx = len(filtered_players)
 start_idx = 0
 
 season = '2023-24'
-end_idx = 1 # uncomment later
+# end_idx = 1 # comment later
 for idx in range(start_idx, end_idx):
 	tpID = filtered_players[idx]['id']
+	l_name = filtered_players[idx]['full_name']
+	print("FPTS for ", l_name, "... ", end="")
 	gamelog = playergamelog.PlayerGameLog(player_id=tpID, season=season)
 	df = gamelog.get_data_frames()[0]
+	if df.empty:
+		print("Error: empty df at tpID ", tpID, " and idx ", idx)
+		sys.exit(1)
+	
 	df['FPT'] = (df['PTS'] * 1 +
              df['AST'] * 1.5 +
              df['REB'] * 1 +
@@ -74,19 +80,23 @@ for idx in range(start_idx, end_idx):
              (df['FTA'] - df['FTM']) * 0.5)
 	file_name = f"./player_list_data/igl/game_log_{tpID}.csv"
 	df.to_csv(file_name, index=False, mode='w')
-	print("FPTS for ", filtered_players[idx]['full_name'], " saved to ", file_name)
-	
+	print(" saved to ", file_name)
+	time.sleep(1)
 '''
 
 ''' ********************************* ```
 	CSVs GENERATED. NOW ANALYZE
 ``` ********************************* '''
 
+all_shap_stats = {}
+all_shap_pvals = {}
+
+outData = pd.DataFrame(columns=["MP_Rank","ID","Name","MP_Tot","Ave","StdDev","W","PVal","CV"])
 
 end_idx = len(filtered_players)
 start_idx = 0
 
-end_idx = 1 # unclomment later
+# end_idx = 1 # comment later
 
 for idx in range(start_idx, end_idx):
 	tpID = filtered_players[idx]['id']
@@ -95,21 +105,46 @@ for idx in range(start_idx, end_idx):
 	fpCol = gamelog_df['FPT']
 
 	# Perform the Shapiro-Wilk test
-	print("Mean and stddev are: ", round(fpCol.mean(), 2), 
+	print("Player ", filtered_players[idx]['full_name'],
+			"Mean and stddev are: ", round(fpCol.mean(), 2), 
 			" and ", round(fpCol.std(), 2))
 	stat, p_value = stats.shapiro(fpCol)
 	stat = "{:.4g}".format(stat)
 	p_value = "{:.4g}".format(p_value)
-	print(f"Shapiro Test Statistic: {stat}")
-	print(f"P-Value: {p_value}")
+	all_shap_stats[idx] = stat
+	all_shap_pvals[idx] = p_value
+	
+	new_row = pd.DataFrame([{"MP_Rank": idx,
+				"ID": tpID,
+				"Name": filtered_players[idx]['full_name'],
+				"MP_Tot": sum(gamelog_df['MIN']),
+				"Ave": round(fpCol.mean(), 2),
+				"StdDev": round(fpCol.std(), 2),
+				"W": stat,
+				"PVal": p_value,
+				"CV" : round(fpCol.std()/fpCol.mean(),2)}])
+	outData = pd.concat([outData,new_row], ignore_index=True)
+	
+	print(f"    Shapiro Test Statistic: {stat}")
+	print(f"    P-Value: {p_value}")
+	
+
+outData.to_csv('./player_list_data/processed_df.csv', index=False)
 
 
 # Plotting the Q-Q plot
+mIdx = 0
+mID = filtered_players[mIdx]['id']
+m_name = filtered_players[mIdx]['full_name']
 plt.figure(figsize=(10, 6))
 stats.probplot(fpCol, dist="norm", plot=plt)
-plt.title('Q-Q Plot of FPT')
-plt.show()
+plt.title(f"Q-Q Plot of {m_name} FPTS")
+mStat = all_shap_stats[mIdx]; mPval = all_shap_pvals[mIdx];
+mTextstr = f'Shapiro Normality Test\nStatistic: {mStat}\nP-Value: {mPval}'
+plt.gca().text(0.05, 0.95, mTextstr, transform=plt.gca().transAxes, fontsize=12,
+               verticalalignment='top', bbox=dict(facecolor='white', alpha=0.5))
 
+plt.show()
 
 
 
